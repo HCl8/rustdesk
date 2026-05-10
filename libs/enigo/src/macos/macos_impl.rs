@@ -165,7 +165,7 @@ impl Enigo {
             event.set_flags(self.flags);
         }
         event.set_integer_value_field(EventField::EVENT_SOURCE_USER_DATA, ENIGO_INPUT_EXTRA_VALUE);
-        event.post(CGEventTapLocation::HID);
+        event.post(CGEventTapLocation::Session);
     }
 }
 
@@ -371,7 +371,7 @@ impl MouseControllable for Enigo {
                         scroll_direction,
                     );
 
-                    CGEventPost(CGEventTapLocation::HID, mouse_ev);
+                    CGEventPost(CGEventTapLocation::Session, mouse_ev);
                     CFRelease(mouse_ev as *const std::ffi::c_void);
                 }
             }
@@ -397,7 +397,7 @@ impl MouseControllable for Enigo {
                         scroll_direction,
                     );
 
-                    CGEventPost(CGEventTapLocation::HID, mouse_ev);
+                    CGEventPost(CGEventTapLocation::Session, mouse_ev);
                     CFRelease(mouse_ev as *const std::ffi::c_void);
                 }
             }
@@ -748,7 +748,7 @@ impl Enigo {
                         )
                     };
 
-                    CGEventPost(CGEventTapLocation::HID, mouse_ev);
+                    CGEventPost(CGEventTapLocation::Session, mouse_ev);
                     CFRelease(mouse_ev as *const std::ffi::c_void);
                 }
             }

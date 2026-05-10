@@ -20,6 +20,22 @@ fn build_mac() {
     }
     b.flag("-std=c++17").file(file).compile("macos");
     println!("cargo:rerun-if-changed={}", file);
+
+    // Add rpath for Swift runtime libraries (used by ScreenCaptureKit bridge)
+    println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
+    println!(
+        "cargo:rustc-link-arg=-Wl,-rpath,/Library/Developer/CommandLineTools/usr/lib/swift/macosx"
+    );
+    if let Ok(output) = std::process::Command::new("xcrun")
+        .args(&["--toolchain", "swift", "--show-sdk-platform-path"])
+        .output()
+    {
+        if output.status.success() {
+            let platform_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let swift_lib_path = format!("{}/Developer/usr/lib/swift/macosx", platform_path);
+            println!("cargo:rustc-link-arg=-Wl,-rpath,{}", swift_lib_path);
+        }
+    }
 }
 
 #[cfg(all(windows, feature = "inline"))]

@@ -720,7 +720,16 @@ async fn wait_initial_config_sync() {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "macos")]
+async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Sender<()>>) {
+    // On macOS, each user server reads its own config from ~/Library/Preferences/.
+    // No daemon config sync needed — each user has an independent RustDesk ID.
+    if let Some(tx) = sync_done_tx {
+        let _ = tx.send(());
+    }
+}
+
+#[cfg(target_os = "linux")]
 async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Sender<()>>) {
     let mut cfg0 = (Config::get(), Config2::get());
     let mut synced = false;

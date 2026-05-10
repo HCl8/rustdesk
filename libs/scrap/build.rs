@@ -226,6 +226,137 @@ fn ffmpeg() {
 }
 */
 
+/// Compile the ScreenCaptureKit Swift bridge into a static library.
+/// Requires swiftc and macOS 12.3+ SDK.
+#[cfg(target_os = "macos")]
+fn compile_screencapturekit_bridge() {
+    use std::process::Command;
+
+    let src_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
+    let src_dir = Path::new(&src_dir);
+    let out_dir = env::var_os("OUT_DIR").unwrap();
+    let out_dir = Path::new(&out_dir);
+
+    let swift_src = src_dir.join("src").join("quartz").join("screencapturekit_bridge.swift");
+    let obj_file = out_dir.join("screencapturekit_bridge.o");
+    let lib_file = out_dir.join("libscreencapturekit_bridge.a");
+
+    // Tell Cargo to re-run if the Swift source changes
+    println!("cargo:rerun-if-changed={}", swift_src.display());
+
+    // Get the macOS SDK path
+    let sdk_output = Command::new("xcrun")
+        .args(&["--sdk", "macosx", "--show-sdk-path"])
+        .output();
+    let sdk_path = match sdk_output {
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        }
+        _ => {
+            println!("cargo:warning=Failed to get macOS SDK path, skipping ScreenCaptureKit bridge compilation");
+            return;
+        }
+    };
+
+    // Get target triple
+    let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| "aarch64".to_string());
+    let arch = if target_arch == "x86_64" { "x86_64" } else { "arm64" };
+    let target_triple = format!("{}-apple-macosx12.3", arch);
+
+    // Compile Swift to object file
+    let swiftc_status = Command::new("swiftc")
+        .args(&[
+            "-emit-object",
+            "-sdk", &sdk_path,
+            "-target", &target_triple,
+            "-O",
+            swift_src.to_str().unwrap(),
+            "-o", obj_file.to_str().unwrap(),
+        ])
+        .status();
+
+    match swiftc_status {
+        Ok(status) if status.success() => {}
+        _ => {
+            println!("cargo:warning=Failed to compile ScreenCaptureKit Swift bridge, skipping");
+            return;
+        }
+    }
+
+    // Create static library from object file
+    let libtool_status = Command::new("libtool")
+        .args(&[
+            "-static",
+            "-o", lib_file.to_str().unwrap(),
+            obj_file.to_str().unwrap(),
+        ])
+        .status();
+
+    match libtool_status {
+        Ok(status) if status.success() => {}
+        _ => {
+            // Fallback: use ar
+            let ar_status = Command::new("ar")
+                .args(&[
+                    "rcs",
+                    lib_file.to_str().unwrap(),
+                    obj_file.to_str().unwrap(),
+                ])
+                .status();
+            match ar_status {
+                Ok(status) if status.success() => {}
+                _ => {
+                    println!("cargo:warning=Failed to create static library for ScreenCaptureKit bridge");
+                    return;
+                }
+            }
+        }
+    }
+
+    println!("cargo:rustc-link-search=native={}", out_dir.display());
+    println!("cargo:rustc-link-lib=static=screencapturekit_bridge");
+    println!("cargo:rustc-link-lib=framework=ScreenCaptureKit");
+    println!("cargo:rustc-link-lib=framework=CoreMedia");
+
+    // Link Swift runtime libraries
+    // Find the Swift toolchain lib path via xcrun
+    let swift_lib_output = Command::new("xcrun")
+        .args(&["--toolchain", "swift", "--show-sdk-platform-path"])
+        .output();
+    if let Ok(output) = swift_lib_output {
+        if output.status.success() {
+            let platform_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let swift_lib_path = format!("{}/Developer/usr/lib/swift/macosx", platform_path);
+            println!("cargo:rustc-link-search=native={}", swift_lib_path);
+        }
+    }
+    // Also try the toolchain lib path
+    let swift_toolchain_output = Command::new("xcrun")
+        .args(&["--toolchain", "swift", "--find", "swift"])
+        .output();
+    if let Ok(output) = swift_toolchain_output {
+        if output.status.success() {
+            let swift_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if let Some(parent) = Path::new(&swift_path).parent() {
+                if let Some(lib_dir) = parent.parent() {
+                    let swift_lib = lib_dir.join("lib").join("swift").join("macosx");
+                    println!("cargo:rustc-link-search=native={}", swift_lib.display());
+                }
+            }
+        }
+    }
+    // Link Swift runtime libraries statically to avoid dylib rpath issues
+    let swift_static_path = "/Library/Developer/CommandLineTools/usr/lib/swift/macosx";
+    println!("cargo:rustc-link-search=native={}", swift_static_path);
+    println!("cargo:rustc-link-lib=static=swiftCompatibility56");
+    println!("cargo:rustc-link-lib=static=swiftCompatibilityConcurrency");
+    // swiftCore and swiftDarwin are only available as dylibs on macOS,
+    // so we link them dynamically and set rpath via the binary's build script
+    println!("cargo:rustc-link-lib=swiftCore");
+    println!("cargo:rustc-link-lib=swiftDarwin");
+    println!("cargo:rustc-link-lib=swiftObjectiveC");
+}
+
 fn main() {
     // in this crate, these are also valid configurations
     println!("cargo:rustc-check-cfg=cfg(dxgi,quartz,x11)");
@@ -248,6 +379,19 @@ fn main() {
     gen_vcpkg_package("libvpx", "vpx_ffi.h", "vpx_ffi.rs", "^[vV].*");
     gen_vcpkg_package("aom", "aom_ffi.h", "aom_ffi.rs", "^(aom|AOM|OBU|AV1).*");
     gen_vcpkg_package("libyuv", "yuv_ffi.h", "yuv_ffi.rs", ".*");
+    // aom may depend on libvmaf (homebrew builds include vmaf support)
+    if cfg!(target_os = "macos") {
+        if let Ok(vcpkg_root) = std::env::var("VCPKG_ROOT") {
+            // vcpkg handles transitive deps
+        } else {
+            // For homebrew, link vmaf explicitly as a transitive dep of aom
+            println!("cargo:rustc-link-lib=static=vmaf");
+            println!(
+                "cargo:rustc-link-search=native={}",
+                link_homebrew_m1("libvmaf").join("lib").display()
+            );
+        }
+    }
     // ffmpeg();
 
     if target_os == "ios" {
@@ -260,6 +404,7 @@ fn main() {
     } else if cfg!(target_os = "macos") {
         // Quartz is second because macOS is the (annoying) exception.
         println!("cargo:rustc-cfg=quartz");
+        compile_screencapturekit_bridge();
     } else if cfg!(unix) {
         // On UNIX we pray that X11 (with XCB) is available.
         println!("cargo:rustc-cfg=x11");

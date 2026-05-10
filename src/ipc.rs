@@ -17,7 +17,7 @@ use crate::{
 use bytes::Bytes;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use clipboard::ClipboardFile;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use hbb_common::anyhow;
 use hbb_common::{
     allow_err, bail, bytes,
@@ -41,17 +41,16 @@ pub(crate) use ipc_auth::authorize_windows_portable_service_ipc_connection;
 pub(crate) use ipc_auth::ensure_peer_executable_matches_current_by_pid_opt;
 #[cfg(windows)]
 pub(crate) use ipc_auth::log_rejected_windows_ipc_connection;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) use ipc_auth::{active_uid, is_allowed_service_peer_uid, peer_uid_from_fd};
 #[cfg(target_os = "linux")]
-pub(crate) use ipc_auth::{
-    active_uid, ensure_peer_executable_matches_current_by_fd, is_allowed_service_peer_uid,
-    log_rejected_uinput_connection, peer_uid_from_fd,
-};
+pub(crate) use ipc_auth::{ensure_peer_executable_matches_current_by_fd, log_rejected_uinput_connection};
 #[cfg(windows)]
 use ipc_auth::{
     authorize_windows_main_ipc_connection, portable_service_listener_security_attributes,
     should_allow_everyone_create_on_windows,
 };
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use ipc_fs::terminal_count_candidate_uids;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use ipc_fs::{
@@ -1204,7 +1203,7 @@ async fn connect_with_path(ms_timeout: u64, path: &str) -> ResultType<Connection
     Ok(ConnectionTmpl::new(client))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub async fn connect_for_uid(
     ms_timeout: u64,
     uid: u32,
@@ -1990,7 +1989,7 @@ mod test {
         assert!(std::mem::size_of::<Data>() <= 120);
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn test_ipc_path_differs_by_uid_for_cm() {
         let effective_uid = unsafe { hbb_common::libc::geteuid() as u32 };

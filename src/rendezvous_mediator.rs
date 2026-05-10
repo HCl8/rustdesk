@@ -758,6 +758,16 @@ fn get_direct_port() -> i32 {
     if port <= 0 {
         port = RENDEZVOUS_PORT + 2;
     }
+    #[cfg(target_os = "macos")]
+    {
+        // In multi-user mode, offset the port by uid to avoid collisions
+        // between user sessions. Each user gets a unique port range.
+        let uid = unsafe { hbb_common::libc::geteuid() as i32 };
+        if uid > 0 {
+            let offset = ((uid - 1) % 16) * 2;
+            port = (RENDEZVOUS_PORT + 2) + offset;
+        }
+    }
     port
 }
 

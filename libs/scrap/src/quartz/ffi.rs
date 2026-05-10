@@ -13,6 +13,7 @@ pub type IOSurfaceRef = *mut c_void;
 pub type DispatchQueue = *mut c_void;
 pub type DispatchQueueAttr = *mut c_void;
 pub type CFAllocatorRef = *mut c_void;
+pub type SCKitCaptureManagerRef = *mut c_void;
 
 #[repr(C)]
 pub struct CFDictionaryKeyCallBacks {
@@ -238,4 +239,24 @@ extern "C" {
 
     pub fn CFRetain(cf: *const c_void);
     pub fn CFRelease(cf: *const c_void);
+}
+
+// ScreenCaptureKit bridge (compiled from screencapturekit_bridge.swift)
+pub type SCKitFrameCallback = extern "C" fn(data: *const u8, width: i32, height: i32, bytes_per_row: i32);
+
+#[link(name = "screencapturekit_bridge", kind = "static")]
+#[link(name = "ScreenCaptureKit", kind = "framework")]
+#[link(name = "CoreMedia", kind = "framework")]
+extern "C" {
+    pub fn sckit_is_available() -> bool;
+    pub fn sckit_create() -> SCKitCaptureManagerRef;
+    pub fn sckit_release(manager: SCKitCaptureManagerRef);
+    pub fn sckit_start_capture(
+        manager: SCKitCaptureManagerRef,
+        display_id: u32,
+        width: i32,
+        height: i32,
+        callback: SCKitFrameCallback,
+    ) -> i32;
+    pub fn sckit_stop_capture(manager: SCKitCaptureManagerRef) -> i32;
 }
