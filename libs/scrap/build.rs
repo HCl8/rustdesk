@@ -144,6 +144,12 @@ fn generate_bindings(
     exact_file: &Path,
     regex: &str,
 ) {
+    // Use pre-generated bindings if available (works around bindgen+Xcode clang issues)
+    if exact_file.exists() {
+        fs::copy(exact_file, ffi_rs).unwrap();
+        return;
+    }
+
     let mut b = bindgen::builder()
         .header(ffi_header.to_str().unwrap())
         .allowlist_type(regex)
