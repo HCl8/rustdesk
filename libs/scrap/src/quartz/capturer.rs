@@ -37,12 +37,15 @@ impl Capturer {
         config: Config,
         handler: F,
     ) -> Result<Capturer, CGError> {
+        // TODO: ScreenCaptureKit causes SIGSEGV in _cg_event_tap_callback_internal
+        // on macOS 26.3 when combined with VideoToolbox encoding. Use CGDisplayStream for now.
         // Try ScreenCaptureKit first (macOS 12.3+), fall back to CGDisplayStream
-        if unsafe { sckit_is_available() } {
-            Self::new_screencapturekit(display, width, height, format, handler)
-        } else {
-            Self::new_cgdisplaystream(display, width, height, format, config, handler)
-        }
+        // if unsafe { sckit_is_available() } {
+        //     Self::new_screencapturekit(display, width, height, format, handler)
+        // } else {
+        //     Self::new_cgdisplaystream(display, width, height, format, config, handler)
+        // }
+        Self::new_cgdisplaystream(display, width, height, format, config, handler)
     }
 
     fn new_screencapturekit<F: Fn(Frame) + 'static>(
