@@ -144,6 +144,12 @@ fn generate_bindings(
     exact_file: &Path,
     regex: &str,
 ) {
+    // Use pre-generated bindings if available (works around bindgen+Xcode clang issues)
+    if exact_file.exists() {
+        fs::copy(exact_file, ffi_rs).unwrap();
+        return;
+    }
+
     let mut b = bindgen::builder()
         .header(ffi_header.to_str().unwrap())
         .allowlist_type(regex)
@@ -317,6 +323,7 @@ fn compile_screencapturekit_bridge() {
     println!("cargo:rustc-link-lib=static=screencapturekit_bridge");
     println!("cargo:rustc-link-lib=framework=ScreenCaptureKit");
     println!("cargo:rustc-link-lib=framework=CoreMedia");
+    println!("cargo:rustc-cfg=screencapturekit_bridge_available");
 
     // Link Swift runtime libraries
     // Find the Swift toolchain lib path via xcrun

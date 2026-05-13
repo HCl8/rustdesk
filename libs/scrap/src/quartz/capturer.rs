@@ -15,6 +15,7 @@ enum CapturerBackend {
         queue: DispatchQueue,
         stopped: Arc<Mutex<bool>>,
     },
+    #[cfg(screencapturekit_bridge_available)]
     ScreenCaptureKit {
         manager: SCKitCaptureManagerRef,
     },
@@ -37,14 +38,18 @@ impl Capturer {
         config: Config,
         handler: F,
     ) -> Result<Capturer, CGError> {
+        // TODO: ScreenCaptureKit causes SIGSEGV in _cg_event_tap_callback_internal
+        // on macOS 26.3 when combined with VideoToolbox encoding. Use CGDisplayStream for now.
         // Try ScreenCaptureKit first (macOS 12.3+), fall back to CGDisplayStream
-        if unsafe { sckit_is_available() } {
-            Self::new_screencapturekit(display, width, height, format, handler)
-        } else {
-            Self::new_cgdisplaystream(display, width, height, format, config, handler)
-        }
+        // if unsafe { sckit_is_available() } {
+        //     Self::new_screencapturekit(display, width, height, format, handler)
+        // } else {
+        //     Self::new_cgdisplaystream(display, width, height, format, config, handler)
+        // }
+        Self::new_cgdisplaystream(display, width, height, format, config, handler)
     }
 
+    #[cfg(screencapturekit_bridge_available)]
     fn new_screencapturekit<F: Fn(Frame) + 'static>(
         display: Display,
         width: usize,
@@ -186,6 +191,7 @@ impl Drop for Capturer {
                     dispatch_release(*queue);
                 }
             }
+            #[cfg(screencapturekit_bridge_available)]
             CapturerBackend::ScreenCaptureKit { manager } => {
                 unsafe {
                     sckit_stop_capture(*manager);
@@ -204,9 +210,12 @@ impl Drop for Capturer {
 // Global storage for the ScreenCaptureKit frame handler.
 // The callback is invoked on a GCD queue at 30fps, so we use AtomicPtr
 // for lock-free access instead of a Mutex.
+#[cfg(screencapturekit_bridge_available)]
 use std::sync::atomic::{AtomicPtr, Ordering};
+#[cfg(screencapturekit_bridge_available)]
 static SCREAMCAPTUREKIT_HANDLER: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 
+#[cfg(screencapturekit_bridge_available)]
 extern "C" fn screencapturekit_frame_callback(
     data: *const u8,
     width: i32,

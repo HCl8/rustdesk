@@ -242,8 +242,10 @@ extern "C" {
 }
 
 // ScreenCaptureKit bridge (compiled from screencapturekit_bridge.swift)
+#[cfg(screencapturekit_bridge_available)]
 pub type SCKitFrameCallback = extern "C" fn(data: *const u8, width: i32, height: i32, bytes_per_row: i32);
 
+#[cfg(screencapturekit_bridge_available)]
 #[link(name = "screencapturekit_bridge", kind = "static")]
 #[link(name = "ScreenCaptureKit", kind = "framework")]
 #[link(name = "CoreMedia", kind = "framework")]
