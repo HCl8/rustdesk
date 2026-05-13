@@ -198,6 +198,20 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
         if !std::path::Path::new(&agent_plist_file).exists() {
             return false;
         }
+        // The agent plist is per-session (LaunchAgent). A file existing on disk
+        // only means another user installed it — verify it's loaded in *this*
+        // user's launchd session before reporting "installed".
+        let label = agent.replace(".plist", "");
+        let agent_loaded = std::process::Command::new("launchctl")
+            .args(["list", &label])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !agent_loaded {
+            return false;
+        }
         return true;
     }
 

@@ -106,7 +106,18 @@ pub fn send_wol(id: String) {
 
 #[inline]
 fn get_broadcast_port() -> u16 {
-    (RENDEZVOUS_PORT + 3) as _
+    let mut port = RENDEZVOUS_PORT + 3;
+    #[cfg(target_os = "macos")]
+    {
+        // In multi-user mode, offset the port by uid to avoid collisions
+        // between user sessions, matching get_direct_port() in rendezvous_mediator.
+        let uid = unsafe { hbb_common::libc::geteuid() as i32 };
+        if uid > 0 {
+            let offset = ((uid - 1) % 16) * 2;
+            port += offset;
+        }
+    }
+    port as _
 }
 
 fn get_mac(_ip: &IpAddr) -> String {
